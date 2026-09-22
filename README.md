@@ -8,7 +8,7 @@ A Perl library for simulating **Laser Direct Imprint Lithography (LDIL)**, inclu
 - **2D thermal solver** — Explicit finite-difference in cylindrical (r,z) coordinates with material database (PMMA, SU-8, polyimide, silicon, gold, copper)
 - **Ablation modeling** — Logarithmic blow-off model, multi-pulse incubation, crater geometry, volume removal rate, ablation efficiency
 - **Phase change** — Melt pool analysis, resolidification time (Stefan number), HAZ depth, enthalpy method
-- **Pattern transfer** — Minimum feature size prediction, edge acuity, aspect ratio limits, process window mapping, scan parameters
+- **Pattern transfer** — Minimum feature size prediction, edge acuity, aspect ratio limits, process window mapping, scan parameters, and accumulated Gaussian scan-dose uniformity
 - **LIFT** — Vapor recoil pressure, jetting threshold, droplet diameter, transfer regime classification, Weber/Reynolds numbers
 - **Interface modules** — OpenFOAM (interFoam for melt dynamics), LAMMPS (TTM + MD for ultrafast ablation)
 
@@ -165,6 +165,10 @@ $pat->edge_acuity(diffusivity => 1e-7, pulse_width => 10e-9, alpha => 1e6);
 $pat->max_aspect_ratio(fluence => 1.0, F_threshold => 0.1, ...);
 $pat->process_window(F_min => 0.05, F_max => 2.0, ...);  # array of points
 $pat->scan_parameters(spot_size => 5e-6, overlap => 0.5, rep_rate => 1e5);
+$pat->scan_dose_profile(
+    fluence => 0.5, spot_size => 5e-6, overlap => 0.5,
+    rep_rate => 1e5, F_threshold => 0.1,
+);  # periodic profile plus min/max/mean dose and nonuniformity
 $pat->line_pattern(fluence => 0.5, spot_size => 5e-6, overlap => 0.5);
 $pat->resolution_comparison(diffusivity => 1e-7);  # compare pulse widths
 ```
@@ -223,6 +227,15 @@ Characterizes LIFT transfer regimes for gold donor film, including threshold det
 
 ```bash
 perl -Ilib examples/lift_gold.pl
+```
+
+### Scan Dose (`examples/scan_dose_profile.pl`)
+
+Compares pulse pitch, scan speed, accumulated dose, and dose ripple as Gaussian
+pulse overlap changes.
+
+```bash
+perl -Ilib examples/scan_dose_profile.pl
 ```
 
 ## Physics Background

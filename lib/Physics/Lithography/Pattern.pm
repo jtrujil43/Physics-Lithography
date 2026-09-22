@@ -3,6 +3,7 @@ use strict;
 use warnings;
 use Carp;
 use List::Util qw(max min);
+use Scalar::Util qw(looks_like_number);
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Pattern transfer fidelity model for laser direct imprint
@@ -17,6 +18,13 @@ use List::Util qw(max min);
 # ═══════════════════════════════════════════════════════════════════════════════
 
 use constant PI => 3.14159265358979;
+
+sub _is_finite_number {
+    my ($value) = @_;
+    return 0 unless defined $value && !ref $value && looks_like_number($value);
+    my $difference = $value - $value;
+    return $difference == $difference;    # false for NaN and infinities
+}
 
 sub new {
     my ($class, %opts) = @_;
@@ -135,6 +143,107 @@ sub scan_parameters {
     };
 }
 
+# Accumulated Gaussian dose over one pulse-to-pulse period of a scanned line.
+# The finite sum is automatically extended until omitted pulse tails are tiny.
+sub scan_dose_profile {
+    my ($self, %opts) = @_;
+
+    my $fluence = $opts{fluence} // 0.5;          # J/cm^2 per pulse at center
+    my $spot    = $opts{spot_size} // 5e-6;       # m, 1/e^2 radius
+    my $rep     = $opts{rep_rate} // 1000;        # Hz
+    my $samples = $opts{samples} // 101;
+
+    croak 'scan_dose_profile(): fluence must be non-negative and finite'
+        unless _is_finite_number($fluence) && $fluence >= 0;
+    croak 'scan_dose_profile(): spot_size must be positive and finite'
+        unless _is_finite_number($spot) && $spot > 0;
+    croak 'scan_dose_profile(): rep_rate must be positive and finite'
+        unless _is_finite_number($rep) && $rep > 0;
+    croak 'scan_dose_profile(): samples must be an integer from 2 to 10001'
+        unless $samples =~ /\A\d+\z/ && $samples >= 2 && $samples <= 10001;
+
+    my ( $pitch, $velocity, $overlap );
+    if ( defined $opts{velocity} ) {
+        croak 'scan_dose_profile(): specify either overlap or velocity, not both'
+            if defined $opts{overlap};
+        $velocity = $opts{velocity};
+        croak 'scan_dose_profile(): velocity must be positive and finite'
+            unless _is_finite_number($velocity) && $velocity > 0;
+        $pitch   = $velocity / $rep;
+        $overlap = 1 - $pitch / ( 2 * $spot );
+    }
+    else {
+        $overlap = $opts{overlap} // 0.5;
+        croak 'scan_dose_profile(): overlap must be at least 0 and less than 1'
+            unless _is_finite_number($overlap)
+                && $overlap >= 0 && $overlap < 1;
+        $pitch    = 2 * $spot * ( 1 - $overlap );
+        $velocity = $pitch * $rep;
+    }
+
+    my $span = $opts{pulses_each_side};
+    if ( defined $span ) {
+        croak 'scan_dose_profile(): pulses_each_side must be an integer from 0 to 10000'
+            unless $span =~ /\A\d+\z/ && $span <= 10000;
+    }
+    else {
+        # Include pulses until a Gaussian centered beyond the sampled period
+        # contributes less than roughly 1e-12 of its peak.
+        my $needed = $spot / $pitch * sqrt( log(1e12) / 2 ) + 0.5;
+        $span = int($needed);
+        ++$span if $span < $needed;
+        croak 'scan_dose_profile(): overlap is too close to 1 for automatic summation'
+            if $span > 10000;
+    }
+
+    my @profile;
+    my ( $min_dose, $max_dose );
+    my $weighted_sum   = 0;
+    my $weighted_above = 0;
+    my $threshold = $opts{F_threshold};
+    croak 'scan_dose_profile(): F_threshold must be non-negative and finite'
+        if defined $threshold
+            && ( !_is_finite_number($threshold) || $threshold < 0 );
+
+    for my $i ( 0 .. $samples - 1 ) {
+        my $x = -$pitch / 2 + $pitch * $i / ( $samples - 1 );
+        my $dose = 0;
+        for my $pulse ( -$span .. $span ) {
+            my $dx = $x - $pulse * $pitch;
+            $dose += $fluence * exp( -2 * $dx * $dx / ( $spot * $spot ) );
+        }
+
+        push @profile, { x_um => $x * 1e6, fluence => $dose };
+        $min_dose = $dose if !defined $min_dose || $dose < $min_dose;
+        $max_dose = $dose if !defined $max_dose || $dose > $max_dose;
+        my $weight = ( $i == 0 || $i == $samples - 1 ) ? 0.5 : 1;
+        $weighted_sum += $weight * $dose;
+        $weighted_above += $weight
+            if defined $threshold && $dose >= $threshold;
+    }
+
+    my $mean = $weighted_sum / ( $samples - 1 );
+    my $denominator = $max_dose + $min_dose;
+    my $nonuniformity = $denominator > 0
+        ? ( $max_dose - $min_dose ) / $denominator : 0;
+
+    my %result = (
+        pitch_um           => $pitch * 1e6,
+        velocity_mm_s      => $velocity * 1e3,
+        overlap            => $overlap,
+        min_fluence        => $min_dose,
+        max_fluence        => $max_dose,
+        mean_fluence       => $mean,
+        dose_nonuniformity => $nonuniformity,
+        pulses_summed      => 2 * $span + 1,
+        profile            => \@profile,
+    );
+    $result{fraction_above_threshold} = $weighted_above / ( $samples - 1 )
+        if defined $threshold;
+
+    return \%result;
+}
+
 # Line pattern: predict line width and depth for scanning
 sub line_pattern {
     my ($self, %opts) = @_;
@@ -186,3 +295,26 @@ sub resolution_comparison {
 }
 
 1;
+
+__END__
+
+=head1 NAME
+
+Physics::Lithography::Pattern - laser pattern-transfer and scan-dose models
+
+=head1 SCANNED-LINE DOSE
+
+C<scan_dose_profile(%options)> sums neighboring Gaussian pulses over one
+pulse-pitch period.  Supply C<fluence>, C<spot_size>, C<rep_rate>, and either
+C<overlap> or C<velocity>.  It returns the derived pitch and velocity, sampled
+dose profile, minimum/maximum/mean fluence, and the standard half-range dose
+nonuniformity C<(max-min)/(max+min)>.  If C<F_threshold> is supplied, the
+result also includes C<fraction_above_threshold>.
+
+The optional C<pulses_each_side> controls the finite pulse train explicitly;
+otherwise enough neighbors are included to reduce Gaussian-tail truncation.
+Numeric physical inputs must be finite.  C<overlap> and C<velocity> are
+mutually exclusive.  Threshold coverage is integrated over the sampled period,
+with the duplicate periodic endpoints receiving half weight.
+
+=cut

@@ -13,5 +13,7 @@ lib/Physics/Lithography/PhaseChange.pm
 lib/Physics/Lithography/Thermal.pm
 examples/lift_gold.pl
 examples/quick_start.pl
+examples/scan_dose_profile.pl
 examples/thermal_imprint.pl
 t/basic.t
+t/pattern_scan_dose.t

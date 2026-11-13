@@ -31,6 +31,13 @@ make test
 - [OpenFOAM](https://www.openfoam.com/) — `apt install openfoam` (Ubuntu) for melt pool CFD
 - [LAMMPS](https://www.lammps.org/) — `apt install lammps` for molecular dynamics of laser-matter interaction
 
+**Optional (for PDL plots and demos):**
+- [PDL](https://pdl.perl.org/) and [PDL::Graphics::Gnuplot](https://metacpan.org/pod/PDL::Graphics::Gnuplot)
+- [gnuplot](http://www.gnuplot.info/) executable
+
+The PDL packages are recommended, not required, dependencies. The core
+simulation modules work without them.
+
 ## Quick Start
 
 ```perl
@@ -237,6 +244,33 @@ pulse overlap changes.
 ```bash
 perl -Ilib examples/scan_dose_profile.pl
 ```
+
+### PDL and Gnuplot
+
+When PDL, PDL::Graphics::Gnuplot, and gnuplot are installed, the module installs
+three plotting commands that save PNG plots (an output filename may be
+provided):
+
+```bash
+litho-pdl-thermal [thermal.png]
+litho-pdl-ablation [ablation.png]
+litho-pdl-scan-dose [scan-dose.png]
+```
+
+The same examples are available interactively from PDL's demo system:
+
+```bash
+perldl
+demo lithography
+```
+
+From a source checkout, run a script with:
+
+```bash
+perl -Ilib examples/litho-pdl-thermal [thermal.png]
+```
+
+Use the corresponding script name for ablation or scan dose.
 
 ## Physics Background
 

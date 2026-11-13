@@ -1,0 +1,14 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use FindBin;
+use lib "$FindBin::Bin/../lib";
+
+eval { require Physics::Lithography::PDLExamples; 1 } or die
+    "This example requires the optional PDL and PDL::Graphics::Gnuplot modules, "
+    . "plus a gnuplot executable. Install them and try again.\n$@";
+
+my $output = shift @ARGV // 'lithography_ablation.png';
+die "Usage: $0 [output.png]\n" if @ARGV;
+Physics::Lithography::PDLExamples::plot_ablation_curves($output);
+print "Wrote $output\n";

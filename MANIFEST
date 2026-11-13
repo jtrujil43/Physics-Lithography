@@ -11,9 +11,15 @@ lib/Physics/Lithography/Laser.pm
 lib/Physics/Lithography/Pattern.pm
 lib/Physics/Lithography/PhaseChange.pm
 lib/Physics/Lithography/Thermal.pm
+lib/Physics/Lithography/PDLExamples.pm
+lib/PDL/Demos/Lithography.pm
 examples/lift_gold.pl
+examples/litho-pdl-ablation
+examples/litho-pdl-scan-dose
+examples/litho-pdl-thermal
 examples/quick_start.pl
 examples/scan_dose_profile.pl
 examples/thermal_imprint.pl
 t/basic.t
+t/pdl_examples.t
 t/pattern_scan_dose.t
